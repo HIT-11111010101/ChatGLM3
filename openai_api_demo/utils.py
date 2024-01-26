@@ -19,27 +19,30 @@ class InvalidScoreLogitsProcessor(LogitsProcessor):
 def process_response(output: str, use_tool: bool = False) -> Union[str, dict]:
     content = ""
     for response in output.split("<|assistant|>"):
-        metadata, content = response.split("\n", maxsplit=1)
-        if not metadata.strip():
-            content = content.strip()
-            content = content.replace("[[训练时间]]", "2023年")
-        else:
-            if use_tool:
-                content = "\n".join(content.split("\n")[1:-1])
-
-                def tool_call(**kwargs):
-                    return kwargs
-
-                parameters = eval(content)
-                content = {
-                    "name": metadata.strip(),
-                    "arguments": json.dumps(parameters, ensure_ascii=False)
-                }
+        try:
+            metadata, content = response.split("\n", maxsplit=1)
+            if not metadata.strip():
+                content = content.strip()
+                content = content.replace("[[训练时间]]", "2023年")
             else:
-                content = {
-                    "name": metadata.strip(),
-                    "content": content
-                }
+                if use_tool:
+                    content = "\n".join(content.split("\n")[1:-1])
+
+                    def tool_call(**kwargs):
+                        return kwargs
+
+                    parameters = eval(content)
+                    content = {
+                        "name": metadata.strip(),
+                        "arguments": json.dumps(parameters, ensure_ascii=False)
+                    }
+                else:
+                    content = {
+                        "name": metadata.strip(),
+                        "content": content
+                    }
+        except:
+            print('process_response except')
     return content
 
 
@@ -54,6 +57,7 @@ def generate_stream_chatglm3(model: PreTrainedModel, tokenizer: PreTrainedTokeni
     echo = params.get("echo", True)
     messages = process_chatglm_messages(messages, tools=tools)
     query, role = messages[-1]["content"], messages[-1]["role"]
+    print(messages) # 输出给到 GLM 的实际消息列表
 
     inputs = tokenizer.build_chat_input(query, history=messages[:-1], role=role)
     inputs = inputs.to(model.device)
@@ -126,7 +130,7 @@ def process_chatglm_messages(messages, tools=None):
         messages.append(
             {
                 "role": "system",
-                "content": "Answer the following questions as best as you can. You have access to the following tools:",
+                "content": "你可以使用下面的工具：",
                 "tools": tools
             }
         )
@@ -143,14 +147,30 @@ def process_chatglm_messages(messages, tools=None):
 
         elif role == "assistant" and func_call is not None:
             for response in content.split("<|assistant|>"):
-                metadata, sub_content = response.split("\n", maxsplit=1)
-                messages.append(
-                    {
-                        "role": role,
-                        "metadata": metadata,
-                        "content": sub_content.strip()
-                    }
-                )
+                try:
+                    metadata, sub_content = response.split("\n", maxsplit=1)
+                    messages.append(
+                        {
+                            "role": role,
+                            "metadata": metadata,
+                            "content": sub_content.strip()
+                        }
+                    )
+                except:
+                    arguments=json.loads(func_call.arguments)
+                    messages.append(
+                        {
+                            "role": role,
+                            "content": content
+                        }
+                    )
+                    messages.append(
+                        {
+                            "role": role,
+                            "metadata": func_call.name,
+                            "content": func_call.arguments
+                        }
+                    )
         else:
             messages.append({"role": role, "content": content})
     return messages

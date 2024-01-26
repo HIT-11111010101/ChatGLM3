@@ -31,7 +31,7 @@ import tiktoken
 import torch
 import uvicorn
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from contextlib import asynccontextmanager
@@ -73,6 +73,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    body = await request.body()
+    # 在这里可以对请求体进行处理
+    # print(f"请求体内容：{body}")
+    response = await call_next(request)
+    return response
 
 class ModelCard(BaseModel):
     id: str
@@ -109,7 +116,7 @@ class DeltaMessage(BaseModel):
 
 ## for Embedding
 class EmbeddingRequest(BaseModel):
-    input: List[str]
+    input: List[str]|str
     model: str
 
 
@@ -307,6 +314,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if isinstance(function_call, dict):
         finish_reason = "function_call"
         function_call = FunctionCallResponse(**function_call)
+        response["text"]=response["text"].split("<|assistant|>")[0]
 
     message = ChatMessage(
         role="assistant",
