@@ -73,6 +73,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     body = await request.body()
@@ -80,6 +81,7 @@ async def add_process_time_header(request: Request, call_next):
     # print(f"请求体内容：{body}")
     response = await call_next(request)
     return response
+
 
 class ModelCard(BaseModel):
     id: str
@@ -116,7 +118,7 @@ class DeltaMessage(BaseModel):
 
 ## for Embedding
 class EmbeddingRequest(BaseModel):
-    input: List[str]|str
+    input: List[str] | str
     model: str
 
 
@@ -181,7 +183,10 @@ async def health() -> Response:
 
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
 async def get_embeddings(request: EmbeddingRequest):
+    if isinstance(request.input, str):
+        request.input = [request.input]
     embeddings = [embedding_model.encode(text) for text in request.input]
+    print(embeddings)
     embeddings = [embedding.tolist() for embedding in embeddings]
 
     def num_tokens_from_string(string: str) -> int:
@@ -314,7 +319,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if isinstance(function_call, dict):
         finish_reason = "function_call"
         function_call = FunctionCallResponse(**function_call)
-        response["text"]=response["text"].split("<|assistant|>")[0]
+        response["text"] = response["text"].split("<|assistant|>")[0]
 
     message = ChatMessage(
         role="assistant",
